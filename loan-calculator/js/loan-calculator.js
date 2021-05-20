@@ -52,5 +52,44 @@ function calculate() {
          * ele visitar.
          */
         save(amount.value, apr.value, years.value, cep.value);
+
+        /* Anúncio: localiza e exibe financeiras locais, mas
+         * ignora erros de rede.
+         */
+        try { //Captura erros dentro destas chaves
+            getLenders(amount.value, apr.value, years.value, cep.value);
+        }
+        catch(e) {/* e ignora esss erros */}
+
+        /* Por fim, traça o gráfico do saldo devedor, dos
+         * juros e dos pagamentos do capital.
+         */
+        chart(principal, interest, monthly, payments);
+    }
+    else {
+        /* O resultado foi Not-a-Number ou infinito, o que
+         * significa que a entrada estava incompleta ou era
+         * inválida. Apaga qualquer saída exibida 
+         * anteriormente.
+         */
+        payment.innerHTML = ""; // Apaga o conteúdos
+        total.innerHTML = "";   // desses elementos.
+        totalinterest.innerHTML = "";
+        chart(); // Sem argumentos, apaga o gráfico
+
+    }
+}
+
+/* Salva a entrada do usuário como propriedades do objeto
+ * localStorage. Essas propriedades ainda existirão quando o 
+ * usuário visitar no futuro. Esse recurso de armazenamento
+ * não vai funcionar em alguns navegadores (o Firefox, exemplo), se você executar a partir de um arquivo local:// URL. Contudo, funciona com HTTP.
+ */
+function save(amount, apr, years, cep) {
+    if (window.localStorage) { // Se browser suportar
+        localStorage.loan_amount = amount;
+        localStorage.loan_apr = apr;
+        localStorage.loan_years = years;
+        localStorage.loan_cep = cep;
     }
 }
