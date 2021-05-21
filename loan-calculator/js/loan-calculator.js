@@ -20,13 +20,11 @@ function calculate() {
     var total = document.getElementById("total");
     var totalinterest = document.getElementById("totalinterest");
     
-    // Obtem a entrada do usuário através dos
-    // elementos de entrada.
+    // Obtem a entrada do usuário através dos elementos de entrada.
     // Presume que tudo isso é válido.
-    // Converte os júros de porcentagem para 
-    // decimais e converte de taxa anual para taxa
-    // mensal. Converte o período de pagamento em
-    // anos para o número de pagamentos mensais.
+    // Converte os júros de porcentagem para decimais e converte de taxa
+    // anual para taxa mensal. Converte o período de pagamento em anos
+    // para o número de pagamentos mensais.
     var principal = parseFloat(amount.value);
     var interest = parseFloat(apr.value) / 100 / 12;
     var payments = parseFloat(years.value) * 12;
@@ -72,11 +70,10 @@ function calculate() {
          * inválida. Apaga qualquer saída exibida 
          * anteriormente.
          */
-        payment.innerHTML = ""; // Apaga o conteúdos
-        total.innerHTML = "";   // desses elementos.
+        payment.innerHTML = ""; // Apaga o conteúdos desses elementos.
+        total.innerHTML = "";
         totalinterest.innerHTML = "";
         chart(); // Sem argumentos, apaga o gráfico
-
     }
 }
 
@@ -86,10 +83,167 @@ function calculate() {
  * não vai funcionar em alguns navegadores (o Firefox, exemplo), se você executar a partir de um arquivo local:// URL. Contudo, funciona com HTTP.
  */
 function save(amount, apr, years, cep) {
-    if (window.localStorage) { // Se browser suportar
+    if (window.localStorage) { // Se o browser suportar
         localStorage.loan_amount = amount;
         localStorage.loan_apr = apr;
         localStorage.loan_years = years;
         localStorage.loan_cep = cep;
+    }
+}
+
+/* Tenta restaurar os campos de entrada automaticamente quando
+ * o documento é carregado pela primeira vez.
+ */
+window.onload = function() {
+    // Se o browser suportar localStorage, dados presentes.
+    if (window.localStorage && localStorage.loan_amount) {
+        document.getElementById("amount").value = localStorage.loan_amount;
+        document.getElementById("apr").value = localStorage.loan_apr;
+        document.getElementById("years").value = localStorage.loan_years;
+        document.getElementById("cep").value = localStorage.loan_cep;
+    }
+};
+
+/* Passa a entrada do usuário para um script no lado do
+ * servidor que (teoricamente) pode retornar uma lista de
+ * links para financeiras locais interessadas em fazer 
+ * empréstimos. Este exemplo não contém uma implementação
+ * real desse serviço de busca de financeiras. Mas se o 
+ * serviço existisse, essa função funcionaria com ele.
+ */
+function getLenders(amount, apr, years, cep) {
+    //Se browser suporta XMLHttpRequest
+    if (!window.XMLHttpRequest) return;
+    
+    //Localiza elemento para exibir lista de financeiras.
+    var ad = document.getElementById("lenders");
+    if (!ad) return; //Encerra se não há ponto de saída.
+    //Codifica entra do usuário como parametros de consulta em um URL.
+    var url = "getLender.php" +                 //URL do serviço mais
+        "?amt=" + encodeURIComponent(amount) +  //dados do
+                                                //string de consulta
+        "&apr=" + encodeURIComponent(apr) +
+        "&yrs" + encodeURIComponent(years) +
+        "&cep" + encodeURIComponent(cep);
+    
+    //Busca conteúdo do URL usando objeto XMLHttpRequest
+    var req = new XMLHttpRequest(); //Inicia novo pedido
+    req.open("GET", url);           //Pedido GET na HTTP
+    zeq.send(null);                 //Envia o pedido sem corpo
+
+    /* Antes de retornar, registra uma função de rotina de
+     * tratamento de evento que será chamada em um momento
+     * posterior, quando a resposta do servidor de HTTP
+     * chegar. Esse tipo de programação assíncrona é muito 
+     * comum em JavaScript do lado do cliente.
+     */
+    req.onreadystatechange = function() {
+        if (req.readyState == 4 && req.status == 200) {
+            //Chegou aqui, resposta HTTP válida e completa
+            var response = req.responseText;    //Resposta HTTP como string
+            var lenders = JSON.parse(response); //Analisa em um array JS
+
+            //Converte array de objetos lender em uma string HTML
+            var list = "";
+            for(var i = 0; i < lenders.length; i++) {
+                list += "<li><a href='" + lenders[i].url + "'>" + 
+                lenders[i].name + "</a>";
+            }
+
+            //Exibe o código HTML no elemento acima.
+            ad.innerHTML = "<ul>" + list + "</ul>";
+        }
+    }
+}
+
+/* Faz o gráfico do saldo devedor mensal, dos juros e do
+ * capital em um elemento <canvas> da HTML.
+ * Se for chamado sem argumentos, basta apagar qualquer gráfico desenhado anteriormente.
+ */
+function chart(principal, interest, monthly, payments) {
+    var graph = document.getElementById("graph");           // Obtém a marca <canvas>
+    graph.width = graph.width;                              // Mágica p/ apagar e redefinir o elemento
+                                                            // <canvas>
+/* Se chamamos sem argumentos ou e esse navegador não suporta
+ * elementos gráficos em um elementos <canvas>, basta retornar
+ * agora.
+ */
+if (arguments.length == 0 || !graph.getContext) return;
+
+//Obtém o objeto "contexto" de <canvas> que define API desenho
+var g = graph.getContext("2d"); //Todo desenho feito esse obj
+var width = graph.width, height = graph.height;//tamanho tela   
+
+// Essas funções convertem números de pagamento e valores monetários em pixels
+function paymentToX(n) { return n * width/payments;}
+function amountToY(a) {return height-(a * height/(monthly*payments*1.05));}
+
+//Os pagamentos são uma linha reta de (0,0) a (payments, monthly*payments)
+g.moveTo(paymentToX(0), amountToY(0));      // Começa no canto inferior esquerdo
+g.lineTo(paymentToX(payments),              // Desenha até o canto superior direito
+        amountToY(monthly*payments));
+g.lineTo(paymentToX(payments), amountToY(0));   // Para baixo, até o canto
+                                                // inferior direito
+g.closePath();                              // E volta do inicio
+g.fillStyle = "#f88";                       // Vermelho claro
+g.fill();                                   // Preenche o triangulo
+g.font = "bold 12px sans-serif";            // Define uma fonte
+g.fillText("Total Interest Payments", 20,20);   //Desenha texto na legenda
+
+// O capital acumulado não é linear e é mais complicado de representar no gráfico
+var equity = 0;
+g.beginPath();                              // Inicia uma nova figura
+g.moveTo(paymentToX(0), amountToY(0));      // Comecando no canto inferior
+                                            // esquerdo
+for(var p = 1; p <= payments; p++) {
+    // Para cada pagamento, descobre quanto é o juro
+    var thisMonthsInterest = (principal-equity)*interest;
+    equity += (monthly - thisMonthsInterest);   // O resto vai para o capital
+    g.lineTo(paymentToX(p), amountToY(equity)); // Linha até este ponto
+}
+g.lineTo(paymentToX(payments), amountToY(0));   // Linha de volta para o eixo X
+g.closePath();                                  // E volta para o ponto inicial
+g.fillStyle = "green";                          // Agora usa tinta verde
+g.fill();                                       // E preenche a área sob a curva
+g.fillText("Total Equity", 20,35);              // Rotula em verde
+
+// Faz laço novamente, como acima, mas representa o saldo devedor como uma linha
+// preta grossa no gráfci
+var bal = principal;
+g.beginPath();
+g.moveTo(paymentToX(0),amountToY(bal));
+for(var p = 1; p <= payments; p++) {
+    var thisMonthsInterest = bal*interest;
+    bal -= (monthly = thisMonthsInterest);      // O resto vai para o capital
+    g.lineTo(paymentToX(p),amountToY(bal));     // Desenha a linha até esse ponto
+}
+g.lineWidth = 3;                                // Usa uma linha grossa
+g.stroke();                                     // Desenha a curva do saldo
+g.fillStyle = "black";                          // Troca para texto PRETO
+g.fillText("Loan Balance", 20,50);              // Entrada da legenda
+
+// Agora faz marcações anuais e eos núemro de ano no eixo X
+g.textAlign="center";                           // Centraliza o texto nas
+                                                // marcas
+var y = amountToY(0);                           // Coordenada Y do eixo X
+for(var year=1; year*12 <= payments; year++) {  // Para cada ano
+    var x = paymentToX(year*12);                // Calcula a posição da marca
+    g.fillRect(x-0.5,y-3,1,3);                  // Desenha a marca
+    if (year == 1) g.fillText("Year", x, y-5);  // Rotula o eixo
+    if (year % 5 == 0 && year*12 !== payments)
+        g.fillText(String(year), x, y-5);
+
+}
+
+// Marca valores de pagamento ao longo da margem direita
+g.textAlign = "right";                          // Alinha o texto à direita
+g.textBaseline = "middle";                      // Centraliza verticalmente
+var ticks = [monthly*payments, principal];      // Os dois pontos que marcaremos
+var rightEdge = paymentToX(payments);           // Coordenada X do eixo Y
+for(var i = 0; i < ticks.length; i++) {         // Para cada um dos 2 pontos
+    var y = amountToY(ticks[i]);                // Calcula a posição Y da marca
+    g.fillRect(rightEdge-3, y-0.5, 3,1);        // Desenha a marcação
+    g.fillText(String(ticks[i].toFixed(0)),     // E a rotula.
+            rightEdge-5, y);
     }
 }
